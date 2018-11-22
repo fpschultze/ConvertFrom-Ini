@@ -1,41 +1,47 @@
 function ConvertFrom-Ini {
     [CmdletBinding()]
     param (
-        [Parameter(Mandatory = $true, ValueFromPipeline = $true, ValueFromPipelineByPropertyName = $true)]
-        [Alias('FullName', 'PSPath')]
+        [Parameter(Mandatory = $true, ValueFromPipeline = $true)]
         [string]
-        $Path
+        $InputObject
     )
-    $ErrorActionPreference = 'Stop'
-    try {
-        $Content = Get-Content -Path $Path | Where-Object {$_ -notmatch '^(\s+)?;|^\s*$'}
 
-        $ConvertedContent = [pscustomobject]@{}
-        $Data = [ordered]@{}
+    begin {
+        $ErrorActionPreference = 'Stop'
+        $OutputObject = [pscustomobject]@{}
+        $Converted = [ordered]@{}
+    }
 
-        switch -Regex ($Content) {
-            '^(\s+)?\[(?<Section>.*)\](\s+)?$' {
-                if ($Data.Count -gt 0) {
-                    $ConvertedContent | Add-Member -MemberType Noteproperty -Name $Section -Value $([pscustomobject]$Data) -Force
-                    $Data = [ordered]@{}
+    process {
+        try {
+            switch -Regex ($InputObject) {
+                '^(\s+)?;|^\s*$' {
+                    #Skip comment or blank line
                 }
-                $Section = $Matches.Section.Trim()
-            }
-            '^(?<Name>.*)\=(?<Value>.*)$' {
-                $Data.Add($Matches.Name.Trim(), $Matches.Value.Trim())
-            }
-            default {
-                'Unexpected line: {0}' -f $_ | Write-Warning
+                '^(\s+)?\[(?<Section>.*)\](\s+)?$' {
+                    if ($Converted.Count -gt 0) {
+                        $OutputObject | Add-Member -MemberType Noteproperty -Name $Section -Value $([pscustomobject]$Converted) -Force
+                        $Converted = [ordered]@{}
+                    }
+                    $Section = $Matches.Section.Trim()
+                }
+                '^(?<Name>.*)\=(?<Value>.*)$' {
+                    $Converted.Add($Matches.Name.Trim(), $Matches.Value.Trim())
+                }
+                default {
+                    'Unexpected line: {0}' -f $_ | Write-Warning
+                }
             }
         }
-        If ($Data.count -gt 0) {
-            $ConvertedContent | Add-Member -MemberType Noteproperty -Name $Section -Value $([pscustomobject]$Data) -Force
+        catch {
+            $PSCmdlet.ThrowTerminatingError($_)
         }
     }
-    catch {
-        $PSCmdlet.ThrowTerminatingError($_)
-    }
-    finally {
-        Write-Output $ConvertedContent
+
+    end {
+        If ($Converted.Count -gt 0) {
+            $OutputObject | Add-Member -MemberType Noteproperty -Name $Section -Value $([pscustomobject]$Converted) -Force
+        }
+        Write-Output $OutputObject
     }
 }
